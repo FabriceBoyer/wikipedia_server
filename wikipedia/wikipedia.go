@@ -84,7 +84,7 @@ func LoadIndex(root_path string, limit int) error {
 		if i%100000 == 0 {
 			log.Printf("read %d entries", i)
 		}
-		if limit > 0 && i > limit {
+		if limit > 0 && i >= limit {
 			break
 		}
 	}
