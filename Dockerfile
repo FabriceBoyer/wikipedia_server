@@ -1,15 +1,15 @@
-FROM golang:1.19-alpine
+FROM golang:1.19-bullseye
 
-# RUN apk add --no-cache pbzip2
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update && apt install -y pbzip2 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY go.* ./
 RUN go mod download
 
-# Use mounted volume instead of copy for live modifications
-# COPY . ./
-# RUN go build -v -o /wikipedia_server
-# CMD [ "/wikipedia_server" ]
+COPY . ./
+RUN go build -v -o /wikipedia_server
+CMD [ "/wikipedia_server" ]
 
-CMD ["go", "run", "main.go"]
+# CMD ["go", "run", "main.go"]
