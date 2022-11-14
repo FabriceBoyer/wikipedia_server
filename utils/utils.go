@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ func (s statusError) Error() string {
 	return fmt.Sprintf("%d - %s", int(s), http.StatusText(int(s)))
 }
 
-func errorHandler(f func(w http.ResponseWriter, r *http.Request) error) http.HandlerFunc {
+func ErrorHandler(f func(w http.ResponseWriter, r *http.Request) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := f(w, r); err != nil {
 			cause := errors.Cause(err)
