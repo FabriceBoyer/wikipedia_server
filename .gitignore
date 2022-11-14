@@ -15,3 +15,5 @@
 # vendor/
 
 dump/
+*.pprof
+__debug*
