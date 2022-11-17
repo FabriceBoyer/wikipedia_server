@@ -13,7 +13,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
-var root_path = "./dump/"
+var root_path = utils.GetEnv("DUMP_PATH", "./dump/")
 
 func main() {
 	err := wikipedia.LoadIndex(root_path, -1)

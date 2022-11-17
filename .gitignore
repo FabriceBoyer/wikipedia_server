@@ -17,3 +17,5 @@
 dump/
 *.pprof
 __debug*
+
+.env

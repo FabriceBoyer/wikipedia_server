@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/pkg/errors"
 )
@@ -25,4 +26,11 @@ func ErrorHandler(f func(w http.ResponseWriter, r *http.Request) error) http.Han
 			w.WriteHeader(status)
 		}
 	}
+}
+
+func GetEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
 }
