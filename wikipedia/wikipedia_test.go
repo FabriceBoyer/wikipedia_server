@@ -3,6 +3,8 @@ package wikipedia
 import (
 	"fmt"
 	"testing"
+
+	"github.com/pkg/profile"
 )
 
 func TestWikipedia(t *testing.T) {
@@ -19,4 +21,14 @@ func TestWikipedia(t *testing.T) {
 	}
 
 	fmt.Print(p.Text + "\n")
+}
+
+func BenchmarkWikipedia(t *testing.B) {
+	defer profile.Start(profile.MemProfileAllocs).Stop()
+	root_path := "../dump/"
+
+	err := LoadIndex(root_path, 1e6)
+	if err != nil {
+		t.Error(err)
+	}
 }
