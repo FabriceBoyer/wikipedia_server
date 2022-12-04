@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"compress/bzip2"
 	"encoding/xml"
-	"flag"
 	"log"
 	_ "net/http/pprof"
 	"os"
@@ -20,28 +19,31 @@ import (
 	"golang.org/x/text/language"
 )
 
-var (
-	indexFile    = flag.String("index", "enwiki-pages-articles-multistream-index.txt.bz2", "the index file to load")
-	articlesFile = flag.String("articles", "enwiki-pages-articles-multistream.xml.bz2", "the article dump file to load")
-)
-
 type indexEntry struct {
 	id, seek int
 }
 
-var mu = struct {
+type Wiki struct {
+	indexFile    string
+	articlesFile string
 	sync.Mutex
 
 	offsets    map[uint64]indexEntry
 	offsetSize map[int]int
-}{
-	offsets:    map[uint64]indexEntry{},
-	offsetSize: map[int]int{},
 }
 
-func LoadIndex(root_path string, limit int) error {
+func CreateWiki(root_path string, indexFile string, articlesFile string) *Wiki {
+	return &Wiki{
+		indexFile:    filepath.Join(root_path, indexFile),
+		articlesFile: filepath.Join(root_path, articlesFile),
+		offsets:      map[uint64]indexEntry{},
+		offsetSize:   map[int]int{},
+	}
+}
 
-	f, err := os.Open(filepath.Join(root_path, *indexFile))
+func (mu *Wiki) LoadIndex(limit int) error {
+
+	f, err := os.Open(mu.indexFile)
 	if err != nil {
 		return err
 	}
@@ -116,17 +118,17 @@ type page struct {
 	Text       string     `xml:"revision>text"`
 }
 
-func SearchTitles(key string) ([]string, error) {
+func (mu *Wiki) SearchTitles(key string) ([]string, error) {
 	return []string{}, nil
 }
 
-func GetArticle(name string, root_path string) (page, error) {
-	articleMeta, err := fetchArticle(name)
+func (mu *Wiki) GetArticle(name string) (page, error) {
+	articleMeta, err := mu.fetchArticle(name)
 	if err != nil {
 		return page{}, err
 	}
 
-	p, err := readArticle(articleMeta, root_path)
+	p, err := mu.readArticle(articleMeta)
 	if err != nil {
 		return page{}, err
 	}
@@ -134,8 +136,8 @@ func GetArticle(name string, root_path string) (page, error) {
 	return p, nil
 }
 
-func readArticle(meta indexEntry, root_path string) (page, error) {
-	f, err := os.Open(filepath.Join(root_path, *articlesFile))
+func (mu *Wiki) readArticle(meta indexEntry) (page, error) {
+	f, err := os.Open(mu.articlesFile)
 	if err != nil {
 		return page{}, err
 	}
@@ -166,7 +168,7 @@ func readArticle(meta indexEntry, root_path string) (page, error) {
 	return page{}, errors.Errorf("failed to find page after %d tries", maxTries)
 }
 
-func fetchArticle(name string) (indexEntry, error) {
+func (mu *Wiki) fetchArticle(name string) (indexEntry, error) {
 	mu.Lock()
 	defer mu.Unlock()
 

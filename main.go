@@ -14,9 +14,12 @@ import (
 )
 
 var root_path = utils.GetEnv("DUMP_PATH", "./dump/")
+var wiki = wikipedia.CreateWiki(root_path, "enwiki-pages-articles-multistream-index.txt.bz2", "enwiki-pages-articles-multistream.xml.bz2")
+var dict = wikipedia.CreateWiki(root_path, "enwiktionary-pages-articles-multistream-index.txt.bz2", "enwiktionary-pages-articles-multistream.xml.bz2")
 
 func main() {
-	err := wikipedia.LoadIndex(root_path, -1)
+
+	err := wiki.LoadIndex(-1)
 	if err != nil {
 		panic(err)
 	}
@@ -28,7 +31,8 @@ func handleRequests() {
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/", handleHomePage)
 	router.HandleFunc("/search/{id}", utils.ErrorHandler(handleSearch))
-	router.HandleFunc("/page/{id}", utils.ErrorHandler(handlePage))
+	router.HandleFunc("/wiki/{id}", utils.ErrorHandler(handleWiki))
+	router.HandleFunc("/dict/{id}", utils.ErrorHandler(handleDict))
 
 	log.Fatal(http.ListenAndServe(":9095", router))
 }
@@ -41,7 +45,7 @@ func handleSearch(w http.ResponseWriter, r *http.Request) error {
 	vars := mux.Vars(r)
 	key := vars["id"]
 
-	titles, err := wikipedia.SearchTitles(key)
+	titles, err := wiki.SearchTitles(key)
 	if err != nil {
 		return err
 	}
@@ -54,12 +58,20 @@ func handleSearch(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func handlePage(w http.ResponseWriter, r *http.Request) error {
+func handleWiki(w http.ResponseWriter, r *http.Request) error {
+	return handlePage(wiki, w, r)
+}
+
+func handleDict(w http.ResponseWriter, r *http.Request) error {
+	return handlePage(dict, w, r)
+}
+
+func handlePage(mu *wikipedia.Wiki, w http.ResponseWriter, r *http.Request) error {
 	//articleName := wikitext.URLToTitle(path.Base(r.URL.Path))
 	vars := mux.Vars(r)
 	articleName := vars["id"]
 
-	p, err := wikipedia.GetArticle(articleName, root_path)
+	p, err := mu.GetArticle(articleName)
 	if err != nil {
 		return err
 	}

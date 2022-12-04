@@ -7,15 +7,18 @@ import (
 	"github.com/pkg/profile"
 )
 
+func createDefaultWiki() *Wiki {
+	return CreateWiki("../dump/", "enwiki-pages-articles-multistream-index.txt.bz2", "enwiki-pages-articles-multistream.xml.bz2")
+}
 func TestWikipedia(t *testing.T) {
-	root_path := "../dump/"
+	mu := createDefaultWiki()
 
-	err := LoadIndex(root_path, 1e4)
+	err := mu.LoadIndex(1e4)
 	if err != nil {
 		t.Error(err)
 	}
 
-	p, err := GetArticle("Anarchism", root_path)
+	p, err := mu.GetArticle("Anarchism")
 	if err != nil {
 		t.Error(err)
 	}
@@ -25,9 +28,9 @@ func TestWikipedia(t *testing.T) {
 
 func BenchmarkWikipedia(t *testing.B) {
 	defer profile.Start(profile.MemProfileAllocs).Stop()
-	root_path := "../dump/"
+	mu := createDefaultWiki()
 
-	err := LoadIndex(root_path, 1e6)
+	err := mu.LoadIndex(1e6)
 	if err != nil {
 		t.Error(err)
 	}

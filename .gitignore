@@ -19,3 +19,4 @@ dump/
 __debug*
 
 .env
+wget-log
