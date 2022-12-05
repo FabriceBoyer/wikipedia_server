@@ -24,6 +24,11 @@ func main() {
 		panic(err)
 	}
 
+	err = dict.LoadIndex(-1)
+	if err != nil {
+		panic(err)
+	}
+
 	handleRequests()
 }
 

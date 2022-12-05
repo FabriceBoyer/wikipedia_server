@@ -56,7 +56,7 @@ func (mu *Wiki) LoadIndex(limit int) error {
 
 	scanner := bufio.NewScanner(r)
 
-	log.Printf("Reading index file...")
+	log.Printf("Reading index file %v ...", mu.indexFile)
 	i := 0
 	for scanner.Scan() {
 		parts := strings.Split(scanner.Text(), ":")
