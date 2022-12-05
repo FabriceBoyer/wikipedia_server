@@ -41,6 +41,7 @@ func CreateWiki(root_path string, indexFile string, articlesFile string) *Wiki {
 	}
 }
 
+// TODO read redirect from content and modify index to it
 func (mu *Wiki) LoadIndex(limit int) error {
 
 	f, err := os.Open(mu.indexFile)
