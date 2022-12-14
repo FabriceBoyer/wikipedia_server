@@ -43,7 +43,7 @@ func handleRequests() {
 }
 
 func handleHomePage(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Welcome to wikipedia server, please use API")
+	fmt.Fprintf(w, "Welcome to wikipedia server, please use API (/dict or /wiki")
 }
 
 func handleSearch(w http.ResponseWriter, r *http.Request) error {
@@ -82,7 +82,7 @@ func handlePage(mu *wikipedia.Wiki, w http.ResponseWriter, r *http.Request) erro
 	}
 
 	if p.Title != articleName {
-		http.Redirect(w, r, path.Join("/page/", wikitext.TitleToURL(p.Title)), http.StatusTemporaryRedirect)
+		http.Redirect(w, r, path.Join("/wiki/", wikitext.TitleToURL(p.Title)), http.StatusTemporaryRedirect)
 		return nil
 	}
 
