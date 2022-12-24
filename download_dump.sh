@@ -1,6 +1,6 @@
 #!/bin/bash
 # Common utils
-wget_cmd="wget -q --show-progress --limit-rate=10M"
+wget_cmd="wget -q --show-progress --limit-rate=1000M"
 
 source $(dirname -- "$0")/.env
 out_dir=$DUMP_PATH
