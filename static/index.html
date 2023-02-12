@@ -9,14 +9,14 @@
 
 <body>
     Welcome to wikipedia server, please use API (/dict?page= or /wiki?name=)<br><br>
-    <form action="/wiki">
-        <label for="page">Wikipedia</label><br>
+    <form action="/wiki" method="get">
+        <label>Wikipedia</label><br>
         <input type="text" name="page" value="Wolf"><br><br>
         <input type="submit" value="Submit">
     </form>
     <br><br>
-    <form action="/dict">
-        <label for="page">Dictionary</label><br>
+    <form action="/dict" method="get">
+        <label>Dictionary</label><br>
         <input type="text" name="page" value="Wolf"><br><br>
         <input type="submit" value="Submit">
     </form>
