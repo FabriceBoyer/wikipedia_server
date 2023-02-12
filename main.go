@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"path"
@@ -16,6 +15,8 @@ import (
 var root_path = utils.GetEnv("DUMP_PATH", "./dump/")
 var wiki = wikipedia.CreateWiki(root_path, "enwiki-pages-articles-multistream-index.txt.bz2", "enwiki-pages-articles-multistream.xml.bz2")
 var dict = wikipedia.CreateWiki(root_path, "enwiktionary-pages-articles-multistream-index.txt.bz2", "enwiktionary-pages-articles-multistream.xml.bz2")
+
+// TODO wikibooks, wikisource, wikiversity, wikimedia commons, wikidata, commons, ...
 
 func main() {
 
@@ -34,21 +35,16 @@ func main() {
 
 func handleRequests() {
 	router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/", handleHomePage)
-	router.HandleFunc("/search/{id}", utils.ErrorHandler(handleSearch))
-	router.HandleFunc("/wiki/{id}", utils.ErrorHandler(handleWiki))
-	router.HandleFunc("/dict/{id}", utils.ErrorHandler(handleDict))
+	router.Handle("/", http.FileServer(http.Dir("./static")))
+	router.HandleFunc("/search", utils.ErrorHandler(handleSearch))
+	router.HandleFunc("/wiki", utils.ErrorHandler(handleWiki))
+	router.HandleFunc("/dict", utils.ErrorHandler(handleDict))
 
 	log.Fatal(http.ListenAndServe(":9095", router))
 }
 
-func handleHomePage(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Welcome to wikipedia server, please use API (/dict or /wiki")
-}
-
 func handleSearch(w http.ResponseWriter, r *http.Request) error {
-	vars := mux.Vars(r)
-	key := vars["id"]
+	key := r.URL.Query().Get("name")
 
 	titles, err := wiki.SearchTitles(key)
 	if err != nil {
@@ -72,9 +68,7 @@ func handleDict(w http.ResponseWriter, r *http.Request) error {
 }
 
 func handlePage(mu *wikipedia.Wiki, w http.ResponseWriter, r *http.Request) error {
-	//articleName := wikitext.URLToTitle(path.Base(r.URL.Path))
-	vars := mux.Vars(r)
-	articleName := vars["id"]
+	articleName := r.URL.Query().Get("page")
 
 	p, err := mu.GetArticle(articleName)
 	if err != nil {
