@@ -76,7 +76,7 @@ func handlePage(mu *wikipedia.Wiki, w http.ResponseWriter, r *http.Request) erro
 	}
 
 	if p.Title != articleName {
-		http.Redirect(w, r, path.Join("/wiki/", wikitext.TitleToURL(p.Title)), http.StatusTemporaryRedirect)
+		http.Redirect(w, r, path.Join("/wiki?page=", wikitext.TitleToURL(p.Title)), http.StatusTemporaryRedirect)
 		return nil
 	}
 
