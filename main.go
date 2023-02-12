@@ -4,11 +4,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"path"
 	"wikipedia_server/utils"
 	"wikipedia_server/wikipedia"
 
-	"github.com/d4l3k/wikigopher/wikitext"
 	"github.com/gorilla/mux"
 )
 
@@ -75,10 +73,10 @@ func handlePage(mu *wikipedia.Wiki, w http.ResponseWriter, r *http.Request) erro
 		return err
 	}
 
-	if p.Title != articleName {
-		http.Redirect(w, r, path.Join("/wiki?page=", wikitext.TitleToURL(p.Title)), http.StatusTemporaryRedirect)
-		return nil
-	}
+	// if p.Title != articleName {
+	// 	http.Redirect(w, r, path.Join("/wiki?page=", wikitext.TitleToURL(p.Title)), http.StatusTemporaryRedirect)
+	// 	return nil
+	// }
 
 	_, err = w.Write([]byte(p.Text))
 	if err != nil {
