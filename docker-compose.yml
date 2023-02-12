@@ -10,10 +10,3 @@ services:
             - 9095:9095
         volumes:
             - .:/app
-    # redis:
-    #     image: redis/redis-stack:latest
-    #     container_name: knowledge_redis
-    #     restart: unless-stopped
-    #     ports:
-    #         - 6379:6379
-    #         - 9096:8001
