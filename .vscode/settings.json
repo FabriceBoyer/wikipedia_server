@@ -6,7 +6,10 @@
         "enwiki",
         "enwiktionary",
         "pbzip",
+        "wikibooks",
         "wikigopher",
-        "wikitext"
+        "wikisource",
+        "wikitext",
+        "wikiversity"
     ]
 }
