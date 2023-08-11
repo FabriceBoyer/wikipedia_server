@@ -1,11 +1,12 @@
 package main
 
 import (
-	"common_go_utils/utils"
 	"encoding/json"
 	"log"
 	"net/http"
 	"wikipedia_server/wikipedia"
+
+	"github.com/fabriceboyer/common_go_utils/utils"
 
 	"github.com/gorilla/mux"
 )
