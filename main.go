@@ -1,10 +1,10 @@
 package main
 
 import (
+	"common_go_utils/utils"
 	"encoding/json"
 	"log"
 	"net/http"
-	"wikipedia_server/utils"
 	"wikipedia_server/wikipedia"
 
 	"github.com/gorilla/mux"
