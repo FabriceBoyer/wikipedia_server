@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/fabriceboyer/common_go_utils/utils"
 	"github.com/pkg/profile"
+	"github.com/spf13/viper"
 )
 
 func createDefaultWiki() *Wiki {
-	return CreateWiki("../dump/", "enwiki-pages-articles-multistream-index.txt.bz2", "enwiki-pages-articles-multistream.xml.bz2")
+	utils.SetupConfig()
+	return CreateWiki(viper.GetString("DUMP_PATH"), "enwiki-pages-articles-multistream-index.txt.bz2", "enwiki-pages-articles-multistream.xml.bz2")
 }
 func TestWikipedia(t *testing.T) {
 	mu := createDefaultWiki()

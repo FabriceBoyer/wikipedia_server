@@ -7,19 +7,28 @@ import (
 	"wikipedia_server/wikipedia"
 
 	"github.com/fabriceboyer/common_go_utils/utils"
+	"github.com/spf13/viper"
 
 	"github.com/gorilla/mux"
 )
 
-var root_path = utils.GetEnv("DUMP_PATH", "./dump/")
-var wiki = wikipedia.CreateWiki(root_path, "enwiki-pages-articles-multistream-index.txt.bz2", "enwiki-pages-articles-multistream.xml.bz2")
-var dict = wikipedia.CreateWiki(root_path, "enwiktionary-pages-articles-multistream-index.txt.bz2", "enwiktionary-pages-articles-multistream.xml.bz2")
+var wiki = &wikipedia.Wiki{}
+var dict = &wikipedia.Wiki{}
 
 // TODO wikibooks, wikisource, wikiversity, wikimedia commons, wikidata, commons, ...
 
 func main() {
 
-	err := wiki.LoadIndex(-1)
+	err := utils.SetupConfig()
+	if err != nil {
+		panic(err)
+	}
+
+	var root_path = viper.GetString("DUMP_PATH")
+	wiki = wikipedia.CreateWiki(root_path, "enwiki-pages-articles-multistream-index.txt.bz2", "enwiki-pages-articles-multistream.xml.bz2")
+	dict = wikipedia.CreateWiki(root_path, "enwiktionary-pages-articles-multistream-index.txt.bz2", "enwiktionary-pages-articles-multistream.xml.bz2")
+
+	err = wiki.LoadIndex(-1)
 	if err != nil {
 		panic(err)
 	}
