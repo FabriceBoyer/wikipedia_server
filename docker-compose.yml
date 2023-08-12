@@ -10,3 +10,4 @@ services:
             - 9095:9095
         volumes:
             - $DUMP_PATH:/dump
+            # - ./static:/static
