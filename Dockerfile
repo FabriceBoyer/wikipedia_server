@@ -1,4 +1,4 @@
-FROM golang:1.20-bullseye
+FROM golang:1.21-bullseye
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt update && apt install -y pbzip2 && rm -rf /var/lib/apt/lists/*

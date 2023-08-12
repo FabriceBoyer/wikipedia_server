@@ -1,6 +1,6 @@
 module wikipedia_server
 
-go 1.20
+go 1.21
 
 // replace github.com/fabriceboyer/common_go_utils => ../common_go_utils
 
