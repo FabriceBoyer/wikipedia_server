@@ -1,4 +1,4 @@
-module wikipedia_server
+module github.com/fabriceboyer/wikipedia_server
 
 go 1.21
 

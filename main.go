@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"wikipedia_server/wikipedia"
+
+	"github.com/fabriceboyer/wikipedia_server/wikipedia"
 
 	"github.com/fabriceboyer/common_go_utils/utils"
 	"github.com/spf13/viper"
