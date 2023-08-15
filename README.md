@@ -28,7 +28,7 @@ Modify values as required in `.env` to store dump files in appropriate location
 
 ## Download data
 
-Call `./download_dump.sh` script to download latest dump
+Call `./download_data.sh` script to download latest dump
 
 Wait for it to finish
 
