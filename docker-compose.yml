@@ -7,7 +7,7 @@ services:
         container_name: wikipedia_server
         restart: unless-stopped
         ports:
-            - 9095:9095
+            - 127.0.0.1:9095:9095
         volumes:
             - $DUMP_PATH:/dump
             # - ./static:/static
