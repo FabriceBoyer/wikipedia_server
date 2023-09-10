@@ -100,16 +100,16 @@ func (mu *Wiki) LoadIndex(limit int) error {
 	return nil
 }
 
-type redirect struct {
+type Redirect struct {
 	Title string `xml:"title,attr"`
 }
 
-type page struct {
+type Page struct {
 	XMLName    xml.Name   `xml:"page"`
 	Title      string     `xml:"title"`
 	NS         int        `xml:"ns"`
 	ID         int        `xml:"id"`
-	Redirect   []redirect `xml:"redirect"`
+	Redirect   []Redirect `xml:"redirect"`
 	RevisionID string     `xml:"revision>id"`
 	Timestamp  string     `xml:"revision>timestamp"`
 	Username   string     `xml:"revision>contributor>username"`
@@ -123,24 +123,24 @@ func (mu *Wiki) SearchTitles(key string) ([]string, error) {
 	return []string{}, nil
 }
 
-func (mu *Wiki) GetArticle(name string) (page, error) {
+func (mu *Wiki) GetArticle(name string) (Page, error) {
 	articleMeta, err := mu.fetchArticle(name)
 	if err != nil {
-		return page{}, err
+		return Page{}, err
 	}
 
 	p, err := mu.readArticle(articleMeta)
 	if err != nil {
-		return page{}, err
+		return Page{}, err
 	}
 
 	return p, nil
 }
 
-func (mu *Wiki) readArticle(meta indexEntry) (page, error) {
+func (mu *Wiki) readArticle(meta indexEntry) (Page, error) {
 	f, err := os.Open(mu.articlesFile)
 	if err != nil {
-		return page{}, err
+		return Page{}, err
 	}
 	defer f.Close()
 
@@ -151,22 +151,22 @@ func (mu *Wiki) readArticle(meta indexEntry) (page, error) {
 	r := bzip2.NewReader(f)
 
 	if _, err := f.Seek(int64(meta.seek), 0); err != nil {
-		return page{}, err
+		return Page{}, err
 	}
 
 	d := xml.NewDecoder(r)
 
-	var p page
+	var p Page
 	for i := 0; i < maxTries; i++ {
 		if err := d.Decode(&p); err != nil {
-			return page{}, err
+			return Page{}, err
 		}
 		if p.ID == meta.id {
 			return p, nil
 		}
 	}
 
-	return page{}, errors.Errorf("failed to find page after %d tries", maxTries)
+	return Page{}, errors.Errorf("failed to find page after %d tries", maxTries)
 }
 
 func (mu *Wiki) fetchArticle(name string) (indexEntry, error) {
