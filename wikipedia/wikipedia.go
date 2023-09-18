@@ -138,7 +138,7 @@ func (mu *Wiki) GetArticle(name string) (Page, error) {
 }
 
 func (mu *Wiki) readArticle(meta indexEntry) (Page, error) {
-	f, err := os.Open(mu.articlesFile)
+	f, err := os.Open(mu.articlesFile) // TODO don't do it on every call, keep it in cache
 	if err != nil {
 		return Page{}, err
 	}
