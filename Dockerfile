@@ -1,28 +1,47 @@
 ARG GO_VERSION=1.21
+FROM golang:${GO_VERSION} AS build
+WORKDIR /src
 
-FROM golang:${GO_VERSION}-alpine as builder
+RUN --mount=type=cache,target=/go/pkg/mod/ \
+    --mount=type=bind,source=go.sum,target=go.sum \
+    --mount=type=bind,source=go.mod,target=go.mod \
+    go mod download -x
 
-WORKDIR /app
-
-COPY go.* ./
-RUN go mod download
-
-COPY *.go ./
-COPY ./wikipedia ./wikipedia
-RUN go build -v -o /wikipedia_server
+RUN --mount=type=cache,target=/go/pkg/mod/ \
+    --mount=type=bind,target=. \
+    CGO_ENABLED=0 go build -o /bin/server .
 
 #################################################
 
 # FROM scratch
-FROM gcr.io/distroless/static AS final
+# FROM gcr.io/distroless/static AS final
+FROM alpine:latest AS final
 
-# ENV DEBIAN_FRONTEND=noninteractive
-# RUN apt update && apt install -y pbzip2 && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apk \
+    apk --update add \
+    ca-certificates \
+    tzdata \
+    # pbzip2 \
+    && \
+    update-ca-certificates
 
-COPY --from=builder /wikipedia_server /
+ARG UID=10001
+RUN adduser \
+    --disabled-password \
+    --gecos "" \
+    --home "/nonexistent" \
+    --shell "/sbin/nologin" \
+    --no-create-home \
+    --uid "${UID}" \
+    appuser
+USER appuser
+
+COPY --from=build /bin/server /
 COPY ./static /static
 COPY ./.env.example /.env
 
-CMD [ "/wikipedia_server" ]
+EXPOSE 9095
+
+ENTRYPOINT [ "/server" ]
 
 

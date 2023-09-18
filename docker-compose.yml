@@ -3,7 +3,9 @@ version: '3.7'
 services:
 
     wikipedia_server:
-        build: .
+        build:
+            context: .
+            target: final
         container_name: wikipedia_server
         restart: unless-stopped
         ports:
