@@ -20,7 +20,7 @@ var dict = &wikipedia.Wiki{}
 
 func main() {
 
-	err := utils.SetupConfig()
+	err := utils.SetupConfigPath(".")
 	if err != nil {
 		panic(err)
 	}
