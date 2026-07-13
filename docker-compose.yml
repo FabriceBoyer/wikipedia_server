@@ -8,6 +8,10 @@ services:
         restart: unless-stopped
         ports:
             - 9095:9095
+        environment:
+            # Path inside the container; the host path comes from .env.
+            DUMP_PATH: /dump
         volumes:
+            # Writable so the server can persist its binary index cache
+            # (*.idx) next to the dumps for fast, low-memory startups.
             - $DUMP_PATH:/dump
-            # - ./static:/static
