@@ -127,7 +127,7 @@ func TestIndexCacheRoundtrip(t *testing.T) {
 	}
 	w1.Close()
 
-	cachePath := filepath.Join(cacheDir, "fixture-index.idx")
+	cachePath := filepath.Join(cacheDir, "fixture-index.sqlite")
 	if _, err := os.Stat(cachePath); err != nil {
 		t.Fatalf("cache file not written: %v", err)
 	}

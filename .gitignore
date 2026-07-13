@@ -9,7 +9,7 @@
 
 # Local data and profiling artifacts
 dump/
-*.idx
+*.sqlite
 *.pprof
 __debug*
 wget-log

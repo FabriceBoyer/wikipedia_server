@@ -9,11 +9,14 @@ Freely based on https://github.com/d4l3k/wikigopher.
 
 - **JSON API**: fetch any article by title, with redirect resolution and
   prefix title search (autocompletion-friendly).
-- **Low memory**: the dump index is compiled once into a compact binary cache
-  that is **mmapped** on later startups — restarts are near-instant and
-  resident memory stays proportional to what is actually read.
-- **No preprocessing of the dumps**: articles are decompressed on demand,
-  one bzip2 stream (~100 pages) at a time, directly from the `.xml.bz2` file.
+- **Low memory, fast restarts**: the dump's title index is loaded into a
+  small on-disk **SQLite** database once; every startup after that just
+  opens that file — no re-parsing, no multi-gigabyte heap, and resident
+  memory stays bounded by SQLite's own page cache rather than by the number
+  of pages in the dump.
+- **No preprocessing of the dumps**: article bodies are never stored in the
+  database — they're decompressed on demand, one bzip2 stream (~100 pages)
+  at a time, straight from the `.xml.bz2` file on disk.
 - **Web UI**: a small React interface with search-as-you-type and a readable
   article preview.
 
@@ -29,10 +32,10 @@ cp .env.example .env          # set DUMP_PATH to where dumps should live
 
 Then open http://localhost:9095.
 
-The very first startup parses the dump indexes (a few minutes, and a transient
-memory peak of a few GB while sorting ~30M titles); the resulting `*.idx`
-cache files are saved next to the dumps, and every restart after that loads
-them in milliseconds via mmap. Stop with `./stop.sh`.
+The very first startup parses the dump indexes into `*.sqlite` cache files
+saved next to the dumps (a few minutes, streamed row by row rather than
+sorted in memory, so it doesn't spike). Every restart after that just opens
+those files. Stop with `./stop.sh`.
 
 ## JSON API
 
@@ -81,13 +84,14 @@ Wikipedia *multistream* dumps come in pairs:
 - `*-multistream.xml.bz2` — a concatenation of independent bzip2 streams of
   ~100 `<page>` elements each, so any stream can be decompressed on its own.
 
-At first startup the index is parsed and compiled into a flat binary file
-(`*.idx`, format `WIX1`): titles sorted and concatenated in one blob, plus
-packed offset/id arrays. Lookups are binary searches over that buffer;
-because the buffer is a read-only mmap of the cache file, the OS pages it in
-on demand and can evict it under pressure. Fetching a page then seeks to its
-stream in the `.xml.bz2`, decompresses just that stream, and scans it for the
-page id.
+At first startup the index is parsed and loaded into a small SQLite database
+(`*.sqlite`, one row per page: `title, id, seek`), indexed on `title` and on
+`seek`. Title lookups and prefix search are then plain indexed SQL queries;
+SQLite's own page cache (capped, not the whole file) backs them, so memory
+stays low regardless of dump size. Article bodies are **never** stored in
+that database: fetching a page looks up its stream offset, seeks there in
+the `.xml.bz2`, decompresses just that one bzip2 stream, and scans it for the
+page id — exactly like before, unchanged.
 
 ## Development
 

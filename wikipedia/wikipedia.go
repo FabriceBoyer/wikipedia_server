@@ -4,7 +4,6 @@
 package wikipedia
 
 import (
-	"bytes"
 	"compress/bzip2"
 	"encoding/xml"
 	"errors"
@@ -34,24 +33,24 @@ const decodesPerStream = 1000
 
 type Options struct {
 	// Limit caps the number of index entries loaded (tests/benchmarks).
-	// When set, the on-disk index cache is bypassed.
+	// When set, a fresh cache is always (re)built rather than reusing a
+	// previously persisted one.
 	Limit int
-	// CacheDir overrides where the binary index cache is written.
+	// CacheDir overrides where the index cache database is written.
 	// Empty means alongside the source index file.
 	CacheDir string
 }
 
 // Wiki reads one dump (index + articles file pair). After Open returns, the
-// index is immutable, so all methods are safe for concurrent use.
+// store is immutable, so all methods are safe for concurrent use.
 type Wiki struct {
-	idx          *index
+	store        *store
 	articles     *os.File
 	articlesSize int64
 }
 
-// Open loads the dump index, preferring a previously saved binary cache
-// (mmapped, near-instant) and otherwise parsing the bz2 index and saving the
-// cache best-effort for next time.
+// Open loads the dump index, preferring a previously built on-disk cache
+// and otherwise parsing the source bz2 index into a fresh one.
 func Open(indexPath, articlesPath string, opts *Options) (*Wiki, error) {
 	if opts == nil {
 		opts = &Options{}
@@ -71,48 +70,56 @@ func Open(indexPath, articlesPath string, opts *Options) (*Wiki, error) {
 		return nil, err
 	}
 
-	srcSize, srcMod := srcStat.Size(), srcStat.ModTime().Unix()
-	cachePath := indexCachePath(indexPath, opts.CacheDir)
-
-	var ix *index
-	if opts.Limit <= 0 {
-		start := time.Now()
-		ix, err = loadIndexFile(cachePath, srcSize, srcMod)
-		if err == nil {
-			slog.Info("index cache loaded", "path", cachePath, "pages", ix.n, "elapsed", time.Since(start))
-		} else if !errors.Is(err, os.ErrNotExist) {
-			slog.Warn("index cache unusable, rebuilding", "path", cachePath, "reason", err)
-		}
-	}
-	if ix == nil {
-		start := time.Now()
-		ix, err = buildIndex(indexPath, opts.Limit, srcSize, srcMod)
-		if err != nil {
-			articles.Close()
-			return nil, err
-		}
-		slog.Info("index parsed", "file", indexPath, "pages", ix.n, "elapsed", time.Since(start))
-		if opts.Limit <= 0 {
-			if err := saveIndexFile(ix, cachePath); err != nil {
-				slog.Warn("could not save index cache (startup will re-parse next time)", "path", cachePath, "error", err)
-			} else if reloaded, err := loadIndexFile(cachePath, srcSize, srcMod); err == nil {
-				// Swap the heap-allocated index for the mmapped file so the
-				// parsed copy can be reclaimed and resident memory drops.
-				ix = reloaded
-				slog.Info("index cache saved", "path", cachePath)
-			}
-		}
+	st, err := openOrBuildStore(indexPath, opts, srcStat.Size(), srcStat.ModTime().Unix())
+	if err != nil {
+		articles.Close()
+		return nil, err
 	}
 
 	return &Wiki{
-		idx:          ix,
+		store:        st,
 		articles:     articles,
 		articlesSize: artStat.Size(),
 	}, nil
 }
 
-func indexCachePath(indexPath, cacheDir string) string {
-	base := strings.TrimSuffix(filepath.Base(indexPath), ".txt.bz2") + ".idx"
+// openOrBuildStore returns a ready-to-query store, preferring a valid
+// on-disk cache and otherwise parsing the source index into a new one,
+// atomically installed so a crash mid-build never corrupts a good cache.
+func openOrBuildStore(indexPath string, opts *Options, srcSize, srcMod int64) (*store, error) {
+	cachePath := storeCachePath(indexPath, opts.CacheDir)
+
+	if opts.Limit <= 0 {
+		if s, err := openStore(cachePath); err == nil {
+			if s.sourceMatches(srcSize, srcMod) {
+				slog.Info("index cache loaded", "path", cachePath, "pages", s.pages())
+				return s, nil
+			}
+			slog.Warn("index cache stale, rebuilding", "path", cachePath)
+			s.close()
+		} else if !os.IsNotExist(err) {
+			slog.Warn("index cache unusable, rebuilding", "path", cachePath, "reason", err)
+		}
+	}
+
+	start := time.Now()
+	tmpPath := cachePath + ".tmp"
+	n, err := buildFileStore(indexPath, tmpPath, opts.Limit, srcSize, srcMod)
+	if err != nil {
+		os.Remove(tmpPath)
+		return nil, err
+	}
+	if err := os.Rename(tmpPath, cachePath); err != nil {
+		os.Remove(tmpPath)
+		return nil, fmt.Errorf("saving index cache: %w", err)
+	}
+	slog.Info("index built", "file", indexPath, "pages", n, "elapsed", time.Since(start))
+
+	return openStore(cachePath)
+}
+
+func storeCachePath(indexPath, cacheDir string) string {
+	base := strings.TrimSuffix(filepath.Base(indexPath), ".txt.bz2") + ".sqlite"
 	if cacheDir == "" {
 		cacheDir = filepath.Dir(indexPath)
 	}
@@ -120,7 +127,7 @@ func indexCachePath(indexPath, cacheDir string) string {
 }
 
 func (w *Wiki) Close() error {
-	err := w.idx.close()
+	err := w.store.close()
 	if cerr := w.articles.Close(); err == nil {
 		err = cerr
 	}
@@ -128,7 +135,7 @@ func (w *Wiki) Close() error {
 }
 
 // Pages returns the number of indexed pages.
-func (w *Wiki) Pages() int { return w.idx.n }
+func (w *Wiki) Pages() int { return w.store.pages() }
 
 type SearchResult struct {
 	Title string `json:"title"`
@@ -147,21 +154,20 @@ func (w *Wiki) Search(query string, limit int) []SearchResult {
 	seen := map[string]struct{}{}
 	results := []SearchResult{}
 	for _, prefix := range w.titleVariants(query) {
-		p := []byte(prefix)
-		for i := w.idx.lowerBound(p); i < w.idx.n && len(results) < limit; i++ {
-			t := w.idx.title(i)
-			if !bytes.HasPrefix(t, p) {
-				break
-			}
-			title := string(t)
-			if _, dup := seen[title]; dup {
-				continue
-			}
-			seen[title] = struct{}{}
-			results = append(results, SearchResult{Title: title, ID: w.idx.id(i)})
-		}
 		if len(results) >= limit {
 			break
+		}
+		matches, err := w.store.searchPrefix(prefix, limit)
+		if err != nil {
+			slog.Error("search failed", "prefix", prefix, "error", err)
+			continue
+		}
+		for _, r := range matches {
+			if _, dup := seen[r.Title]; dup {
+				continue
+			}
+			seen[r.Title] = struct{}{}
+			results = append(results, r)
 		}
 	}
 	// Shorter titles first: better autocompletion ranking for prefixes.
@@ -171,6 +177,9 @@ func (w *Wiki) Search(query string, limit int) []SearchResult {
 		}
 		return results[i].Title < results[j].Title
 	})
+	if len(results) > limit {
+		results = results[:limit]
+	}
 	return results
 }
 
@@ -196,14 +205,14 @@ func (w *Wiki) GetArticle(title string, follow bool) (*Article, error) {
 	var chain []string
 	seen := map[string]struct{}{}
 	for hop := 0; hop <= maxRedirects; hop++ {
-		i, ok := w.lookup(name)
+		seek, id, ok := w.lookup(name)
 		if !ok {
 			if len(chain) > 0 {
 				return nil, fmt.Errorf("%w: %q (redirect target of %q)", ErrNotFound, name, title)
 			}
 			return nil, fmt.Errorf("%w: %q", ErrNotFound, title)
 		}
-		p, err := w.readPage(i)
+		p, err := w.readPage(seek, id)
 		if err != nil {
 			return nil, err
 		}
@@ -233,13 +242,13 @@ func (w *Wiki) GetArticle(title string, follow bool) (*Article, error) {
 }
 
 // lookup tries the title as given plus common capitalization variants.
-func (w *Wiki) lookup(name string) (int, bool) {
+func (w *Wiki) lookup(name string) (seek int64, id int, ok bool) {
 	for _, cand := range w.titleVariants(name) {
-		if i, ok := w.idx.find([]byte(cand)); ok {
-			return i, true
+		if seek, id, ok := w.store.find(cand); ok {
+			return seek, id, true
 		}
 	}
-	return 0, false
+	return 0, 0, false
 }
 
 func (w *Wiki) titleVariants(name string) []string {
@@ -293,10 +302,8 @@ type page struct {
 // readPage decompresses only the bzip2 stream containing the page (the
 // multistream format packs ~100 pages per stream) and scans it for the id.
 // io.NewSectionReader keeps this safe under concurrency: no shared seeking.
-func (w *Wiki) readPage(i int) (*page, error) {
-	seek := w.idx.seek(i)
-	id := w.idx.id(i)
-	end := w.idx.streamEnd(seek, w.articlesSize)
+func (w *Wiki) readPage(seek int64, id int) (*page, error) {
+	end := w.store.streamEnd(seek, w.articlesSize)
 
 	section := io.NewSectionReader(w.articles, seek, end-seek)
 	dec := xml.NewDecoder(bzip2.NewReader(section))
