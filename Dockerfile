@@ -4,6 +4,10 @@ ARG GO_VERSION=1.25
 FROM node:22-alpine AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
+# postinstall (below) vendors swagger-ui-dist assets via this script, so it
+# must be present before `npm ci` runs, ahead of the full `COPY web/ .` -
+# keeps the dependency-install layer cacheable across unrelated source changes.
+COPY web/scripts ./scripts
 RUN --mount=type=cache,target=/root/.npm \
     npm ci
 COPY web/ .
