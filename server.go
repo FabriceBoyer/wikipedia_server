@@ -50,7 +50,9 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("GET /api/status", s.handleStatus)
 	mux.HandleFunc("GET /api/sources", s.handleSources)
 	mux.HandleFunc("GET /api/{source}/search", s.handleSearch)
+	mux.HandleFunc("GET /api/{source}/random", s.handleRandom)
 	mux.HandleFunc("GET /api/{source}/page/{title...}", s.handlePage)
+	mux.HandleFunc("GET /api/openapi.yaml", s.handleOpenAPISpec)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
@@ -120,6 +122,29 @@ func (s *server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		"query":   query,
 		"results": results,
 	})
+}
+
+func (s *server) handleRandom(w http.ResponseWriter, r *http.Request) {
+	src, ok := s.sources[r.PathValue("source")]
+	if !ok {
+		writeError(w, http.StatusNotFound, "unknown_source", "unknown source: "+r.PathValue("source"))
+		return
+	}
+	article, err := src.wiki.RandomArticle(true)
+	if err != nil {
+		slog.Error("failed to pick random article", "source", src.Name, "error", err)
+		writeError(w, http.StatusInternalServerError, "read_error", "failed to pick a random article")
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		Source string `json:"source"`
+		*wikipedia.Article
+	}{src.Name, article})
+}
+
+func (s *server) handleOpenAPISpec(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+	w.Write(openAPISpec)
 }
 
 func (s *server) handlePage(w http.ResponseWriter, r *http.Request) {

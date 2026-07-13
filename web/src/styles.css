@@ -119,6 +119,26 @@ body {
   margin-left: auto;
 }
 
+.random-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.random-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .searchicon {
   position: absolute;
   left: 0.7rem;
@@ -304,18 +324,74 @@ button.chip.toggle.on {
   padding-left: 1.6em;
 }
 
-a.ilink {
+a.ilink,
+a.anchor-link {
   color: var(--accent);
   text-decoration: none;
   cursor: pointer;
 }
 
-a.ilink:hover {
+a.ilink:hover,
+a.anchor-link:hover {
   text-decoration: underline;
 }
 
 .content a[target="_blank"] {
   color: var(--accent);
+}
+
+/* --- table of contents --- */
+
+.toc {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.9rem 1.2rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.toc-title {
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.toc ol {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.toc li {
+  margin: 0.15rem 0;
+}
+
+/* --- categories --- */
+
+.categories {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.categories-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-right: 0.2rem;
+}
+
+.chip.category {
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.chip.category:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .raw {

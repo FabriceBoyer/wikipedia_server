@@ -1,0 +1,290 @@
+openapi: 3.0.3
+info:
+  title: Wikipedia Server API
+  description: >
+    Serves Wikipedia/Wiktionary article content straight from local
+    multistream XML dumps, with no database. Article bodies are wikitext
+    (the raw MediaWiki markup), not rendered HTML.
+  version: "2.0.0"
+  license:
+    name: MIT
+externalDocs:
+  description: Project README
+  url: https://github.com/fabriceboyer/wikipedia_server
+tags:
+  - name: sources
+    description: Loaded dumps (e.g. Wikipedia, Wiktionary)
+  - name: articles
+    description: Fetching and searching pages
+  - name: meta
+    description: Server status and health
+
+paths:
+  /api/status:
+    get:
+      tags: [meta]
+      summary: Server status
+      operationId: getStatus
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+
+  /api/sources:
+    get:
+      tags: [sources]
+      summary: List loaded sources
+      operationId: listSources
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Source"
+
+  /api/{source}/search:
+    get:
+      tags: [articles]
+      summary: Prefix search for article titles
+      description: >
+        Case-insensitive for common capitalizations (as typed, First-upper,
+        Title Case, lower). Intended for autocompletion.
+      operationId: searchTitles
+      parameters:
+        - $ref: "#/components/parameters/Source"
+        - name: q
+          in: query
+          required: true
+          description: Title prefix to search for
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of results (capped server-side)
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/{source}/random:
+    get:
+      tags: [articles]
+      summary: Fetch a uniformly-random article
+      description: >
+        Picks a page at random from the index. If the pick happens to be a
+        redirect, it is resolved the same way as GET /page/{title}.
+      operationId: getRandomArticle
+      parameters:
+        - $ref: "#/components/parameters/Source"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Article"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /api/{source}/page/{title}:
+    get:
+      tags: [articles]
+      summary: Fetch an article by title
+      description: >
+        Titles are matched case-insensitively for common capitalizations,
+        and underscores are treated as spaces. The title may itself contain
+        `/` characters (some Wikipedia titles do); the whole remainder of
+        the path after `/page/` is taken as the title.
+      operationId: getArticle
+      parameters:
+        - $ref: "#/components/parameters/Source"
+        - name: title
+          in: path
+          required: true
+          description: Page title, e.g. "Albert Einstein"
+          schema:
+            type: string
+        - name: follow
+          in: query
+          required: false
+          description: Resolve redirect pages transparently (default true)
+          schema:
+            type: boolean
+            default: true
+        - name: raw
+          in: query
+          required: false
+          description: Return only the wikitext body as text/plain instead of JSON
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Article"
+            text/plain:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
+  /healthz:
+    get:
+      tags: [meta]
+      summary: Liveness probe
+      operationId: healthz
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+
+components:
+  parameters:
+    Source:
+      name: source
+      in: path
+      required: true
+      description: Loaded source name, e.g. "wiki" or "dict"
+      schema:
+        type: string
+        example: wiki
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    Source:
+      type: object
+      properties:
+        name:
+          type: string
+          example: wiki
+        description:
+          type: string
+          example: Wikipedia (English)
+        pages:
+          type: integer
+          example: 6800000
+      required: [name, description, pages]
+    Status:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        uptime:
+          type: string
+          example: 1h2m3s
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/Source"
+      required: [status, uptime, sources]
+    SearchResult:
+      type: object
+      properties:
+        title:
+          type: string
+        id:
+          type: integer
+      required: [title, id]
+    SearchResponse:
+      type: object
+      properties:
+        source:
+          type: string
+        query:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResult"
+      required: [source, query, results]
+    Article:
+      type: object
+      properties:
+        source:
+          type: string
+          example: wiki
+        title:
+          type: string
+          example: Albert Einstein
+        id:
+          type: integer
+          example: 736
+        ns:
+          type: integer
+          description: MediaWiki namespace (0 = main/article)
+          example: 0
+        revisionId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        model:
+          type: string
+          example: wikitext
+        format:
+          type: string
+          example: text/x-wiki
+        redirectTo:
+          type: string
+          description: Present when this page is itself a redirect (only when follow=false)
+        redirectedFrom:
+          type: array
+          description: Titles of redirect pages traversed to reach this article, in order
+          items:
+            type: string
+        text:
+          type: string
+          description: Raw wikitext body
+      required: [source, title, id, ns, text]
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: not_found
+            message:
+              type: string
+              example: 'article not found: "Nonexistent Page"'
+          required: [code, message]
+      required: [error]

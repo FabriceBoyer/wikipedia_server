@@ -109,6 +109,36 @@ func TestAPISearch(t *testing.T) {
 	getJSON(t, ts.URL+"/api/wiki/search?q=a&limit=0", http.StatusBadRequest, nil)
 }
 
+func TestAPIRandom(t *testing.T) {
+	ts := testServer(t)
+
+	var article struct {
+		Title string `json:"title"`
+		Text  string `json:"text"`
+	}
+	getJSON(t, ts.URL+"/api/wiki/random", http.StatusOK, &article)
+	if article.Title == "" || article.Text == "" {
+		t.Errorf("random article missing title/text: %+v", article)
+	}
+
+	getJSON(t, ts.URL+"/api/nope/random", http.StatusNotFound, nil)
+}
+
+func TestOpenAPISpec(t *testing.T) {
+	ts := testServer(t)
+	resp, err := http.Get(ts.URL + "/api/openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "yaml") {
+		t.Errorf("Content-Type = %q, want yaml", ct)
+	}
+}
+
 func TestAPIStatusAndSources(t *testing.T) {
 	ts := testServer(t)
 
@@ -120,7 +150,7 @@ func TestAPIStatusAndSources(t *testing.T) {
 		} `json:"sources"`
 	}
 	getJSON(t, ts.URL+"/api/status", http.StatusOK, &st)
-	if st.Status != "ok" || len(st.Sources) != 1 || st.Sources[0].Pages != 6 {
+	if st.Status != "ok" || len(st.Sources) != 1 || st.Sources[0].Pages != 1208 {
 		t.Errorf("unexpected status: %+v", st)
 	}
 }

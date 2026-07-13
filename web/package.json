@@ -4,6 +4,7 @@
   "version": "2.0.0",
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/copy-swagger-ui.mjs",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview"
@@ -16,6 +17,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "swagger-ui-dist": "^5.32.8",
     "typescript": "^5.7.2",
     "vite": "^6.0.3"
   }

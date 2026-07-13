@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import { searchTitles, SearchResult } from "../api";
 
 interface Props {
@@ -6,7 +6,10 @@ interface Props {
   onSelect: (title: string) => void;
 }
 
-export default function SearchBar({ source, onSelect }: Props) {
+const SearchBar = forwardRef<HTMLInputElement, Props>(function SearchBar(
+  { source, onSelect },
+  inputRef,
+) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [open, setOpen] = useState(false);
@@ -74,8 +77,9 @@ export default function SearchBar({ source, onSelect }: Props) {
         />
       </svg>
       <input
+        ref={inputRef}
         type="search"
-        placeholder="Search articles…"
+        placeholder="Search articles… (press /)"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={onKeyDown}
@@ -101,4 +105,6 @@ export default function SearchBar({ source, onSelect }: Props) {
       )}
     </div>
   );
-}
+});
+
+export default SearchBar;

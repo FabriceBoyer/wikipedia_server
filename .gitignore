@@ -20,3 +20,8 @@ wget-log
 # Web UI
 web/node_modules/
 web/dist/
+# swagger-ui-dist assets, vendored at install time by copy-swagger-ui.mjs;
+# only web/public/swagger/index.html itself is hand-written and tracked.
+web/public/swagger/*.js
+web/public/swagger/*.css
+web/public/swagger/*.png

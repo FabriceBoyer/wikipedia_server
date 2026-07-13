@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"os"
 	"strconv"
 	"strings"
@@ -96,13 +97,39 @@ func (s *store) pages() int {
 	return n
 }
 
-// find looks up the exact byte-for-byte title.
+// find looks up the exact byte-for-byte title. The real Wikipedia index
+// occasionally contains a handful of exact-duplicate titles pointing at two
+// different pages (e.g. a stale entry left over from a page move that raced
+// the dump snapshot) - title is intentionally not a unique index, so this
+// can never fail the whole import over it. When duplicates exist, the
+// highest page id (usually the most recently created page, so the more
+// likely current occupant of that title) wins, deterministically.
 func (s *store) find(title string) (seek int64, id int, ok bool) {
-	err := s.db.QueryRow(`SELECT seek, id FROM pages WHERE title = ?`, title).Scan(&seek, &id)
+	err := s.db.QueryRow(`SELECT seek, id FROM pages WHERE title = ? ORDER BY id DESC LIMIT 1`, title).Scan(&seek, &id)
 	if err != nil {
 		return 0, 0, false
 	}
 	return seek, id, true
+}
+
+// random returns a uniformly-random page's (seek, id, title), or ok=false if
+// the store is empty. Rows are only ever bulk-inserted once and never
+// deleted, so rowids are contiguous from 1..pages(): picking one directly is
+// an O(log n) point lookup rather than a full-table "ORDER BY RANDOM()" scan.
+func (s *store) random() (seek int64, id int, title string, ok bool) {
+	n := s.pages()
+	if n <= 0 {
+		return 0, 0, "", false
+	}
+	target := rand.Int64N(int64(n)) + 1
+	var rowid int64
+	err := s.db.QueryRow(
+		`SELECT rowid, title, id, seek FROM pages WHERE rowid >= ? LIMIT 1`, target,
+	).Scan(&rowid, &title, &id, &seek)
+	if err != nil {
+		return 0, 0, "", false
+	}
+	return seek, id, title, true
 }
 
 // searchPrefix returns up to limit (title, id) pairs whose title starts with
@@ -227,7 +254,10 @@ func buildFileStore(indexPath, dbPath string, limit int, srcSize, srcModTime int
 	}
 
 	slog.Info("building index B-tree", "entries", n)
-	if _, err := db.Exec(`CREATE UNIQUE INDEX idx_pages_title ON pages(title)`); err != nil {
+	// Not UNIQUE: the real dump index can contain a handful of exact
+	// duplicate titles (see find's doc comment) - enforcing uniqueness here
+	// would abort loading the *entire* source over a tiny handful of rows.
+	if _, err := db.Exec(`CREATE INDEX idx_pages_title ON pages(title)`); err != nil {
 		return 0, err
 	}
 	if _, err := db.Exec(`CREATE INDEX idx_pages_seek ON pages(seek)`); err != nil {

@@ -24,8 +24,9 @@ func openFixture(t *testing.T) *Wiki {
 func TestGetArticle(t *testing.T) {
 	w := openFixture(t)
 
-	if got := w.Pages(); got != 6 {
-		t.Errorf("Pages() = %d, want 6", got)
+	const wantPages = 6 + 2 + 1200 // see testdata/generate.sh
+	if got := w.Pages(); got != wantPages {
+		t.Errorf("Pages() = %d, want %d", got, wantPages)
 	}
 
 	tests := []struct {
@@ -85,6 +86,38 @@ func TestRedirects(t *testing.T) {
 	}
 	if a.Title != "Einstein" || a.RedirectTo != "Albert Einstein" {
 		t.Errorf("follow=false: got title %q redirectTo %q", a.Title, a.RedirectTo)
+	}
+}
+
+// TestDuplicateTitles guards against a real bug where the enwiki dump's
+// index occasionally contains two entries with the exact same title (e.g.
+// a stale row from a page move racing the dump snapshot): the store must
+// not reject the whole import over it, and lookups must deterministically
+// resolve to one of them (the higher page id) rather than erroring.
+func TestDuplicateTitles(t *testing.T) {
+	w := openFixture(t)
+	a, err := w.GetArticle("Duplicate Title", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.ID != 6000 {
+		t.Errorf("ID = %d, want 6000 (the higher of the two duplicates)", a.ID)
+	}
+}
+
+// TestOversizedStream guards against a real bug where a fixed cap on pages
+// decoded per bzip2 stream silently dropped pages living past it in
+// streams packing far more than the nominal ~100 pages (long runs of short
+// redirect stubs are common in the real dump). This fixture packs 1200
+// pages into one stream; the last one must still be reachable.
+func TestOversizedStream(t *testing.T) {
+	w := openFixture(t)
+	a, err := w.GetArticle("Filler 1200", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.ID != 8200 {
+		t.Errorf("ID = %d, want 8200", a.ID)
 	}
 }
 
@@ -158,6 +191,24 @@ func TestIndexCacheRoundtrip(t *testing.T) {
 	defer w3.Close()
 	if _, err := w3.GetArticle("Autism", true); err != nil {
 		t.Errorf("lookup after cache rebuild: %v", err)
+	}
+}
+
+func TestRandomArticle(t *testing.T) {
+	w := openFixture(t)
+	seen := map[string]struct{}{}
+	for i := 0; i < 20; i++ {
+		a, err := w.RandomArticle(true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if a.Title == "" || a.Text == "" {
+			t.Fatalf("random article missing title/text: %+v", a)
+		}
+		seen[a.Title] = struct{}{}
+	}
+	if len(seen) < 2 {
+		t.Errorf("RandomArticle returned the same title %d/20 times, expected variety", 20-len(seen)+1)
 	}
 }
 

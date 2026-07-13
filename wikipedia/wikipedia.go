@@ -20,6 +20,7 @@ import (
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+	"golang.org/x/text/unicode/norm"
 )
 
 // ErrNotFound is returned when no page matches the requested title.
@@ -27,9 +28,14 @@ var ErrNotFound = errors.New("article not found")
 
 const maxRedirects = 5
 
-// decodesPerStream caps how many pages we decode inside one bzip2 stream
-// while looking for the target id; dumps pack 100 pages per stream.
-const decodesPerStream = 1000
+// maxPagesPerStream is a safety net against corrupt input, not a real
+// limit: the multistream format nominally packs ~100 pages per bzip2
+// stream, but real dumps occasionally pack many more (e.g. runs of short
+// redirect stubs), so the actual bound is simply the stream's own EOF -
+// io.NewSectionReader in readPage already stops decoding at the next
+// stream's offset. An earlier, much lower cap here silently dropped
+// legitimate pages living past it in oversized streams.
+const maxPagesPerStream = 1_000_000
 
 type Options struct {
 	// Limit caps the number of index entries loaded (tests/benchmarks).
@@ -202,21 +208,57 @@ type Article struct {
 // is reported in RedirectedFrom.
 func (w *Wiki) GetArticle(title string, follow bool) (*Article, error) {
 	name := normalizeTitle(title)
-	var chain []string
-	seen := map[string]struct{}{}
-	for hop := 0; hop <= maxRedirects; hop++ {
+	seek, id, ok := w.lookup(name)
+	if !ok {
+		return nil, fmt.Errorf("%w: %q", ErrNotFound, title)
+	}
+	p, err := w.readPage(seek, id)
+	if err != nil {
+		return nil, err
+	}
+	if target := p.Redirect.Title; target == "" || !follow {
+		return pageToArticle(p, nil), nil
+	}
+	return w.followRedirects(normalizeTitle(p.Redirect.Title), []string{p.Title}, map[string]struct{}{p.Title: {}})
+}
+
+// RandomArticle picks a page uniformly at random from the index. When
+// follow is true and the pick happens to be a redirect, it is resolved the
+// same way GetArticle resolves one.
+func (w *Wiki) RandomArticle(follow bool) (*Article, error) {
+	seek, id, _, ok := w.store.random()
+	if !ok {
+		return nil, fmt.Errorf("no pages available")
+	}
+	p, err := w.readPage(seek, id)
+	if err != nil {
+		return nil, err
+	}
+	if target := p.Redirect.Title; target != "" && follow {
+		if a, err := w.followRedirects(normalizeTitle(target), []string{p.Title}, map[string]struct{}{p.Title: {}}); err == nil {
+			return a, nil
+		}
+		// Landed on a dangling or cyclic redirect purely by chance: surface
+		// the redirect stub itself rather than failing the whole request.
+	}
+	return pageToArticle(p, nil), nil
+}
+
+// followRedirects resolves a chain of redirects starting at name (bounded,
+// cycle-safe), returning the final non-redirect page as an Article whose
+// RedirectedFrom records every hop already taken (chain) plus any further
+// ones needed to reach it.
+func (w *Wiki) followRedirects(name string, chain []string, seen map[string]struct{}) (*Article, error) {
+	for hop := len(chain); hop <= maxRedirects; hop++ {
 		seek, id, ok := w.lookup(name)
 		if !ok {
-			if len(chain) > 0 {
-				return nil, fmt.Errorf("%w: %q (redirect target of %q)", ErrNotFound, name, title)
-			}
-			return nil, fmt.Errorf("%w: %q", ErrNotFound, title)
+			return nil, fmt.Errorf("%w: %q", ErrNotFound, name)
 		}
 		p, err := w.readPage(seek, id)
 		if err != nil {
 			return nil, err
 		}
-		if target := p.Redirect.Title; target != "" && follow {
+		if target := p.Redirect.Title; target != "" {
 			if _, cycle := seen[p.Title]; !cycle {
 				seen[p.Title] = struct{}{}
 				chain = append(chain, p.Title)
@@ -224,21 +266,24 @@ func (w *Wiki) GetArticle(title string, follow bool) (*Article, error) {
 				continue
 			}
 		}
-		a := &Article{
-			Title:          p.Title,
-			ID:             p.ID,
-			NS:             p.NS,
-			RevisionID:     p.RevisionID,
-			Timestamp:      p.Timestamp,
-			Model:          p.Model,
-			Format:         p.Format,
-			RedirectTo:     p.Redirect.Title,
-			RedirectedFrom: chain,
-			Text:           p.Text,
-		}
-		return a, nil
+		return pageToArticle(p, chain), nil
 	}
-	return nil, fmt.Errorf("too many redirects resolving %q", title)
+	return nil, fmt.Errorf("too many redirects resolving %q", name)
+}
+
+func pageToArticle(p *page, chain []string) *Article {
+	return &Article{
+		Title:          p.Title,
+		ID:             p.ID,
+		NS:             p.NS,
+		RevisionID:     p.RevisionID,
+		Timestamp:      p.Timestamp,
+		Model:          p.Model,
+		Format:         p.Format,
+		RedirectTo:     p.Redirect.Title,
+		RedirectedFrom: chain,
+		Text:           p.Text,
+	}
 }
 
 // lookup tries the title as given plus common capitalization variants.
@@ -278,8 +323,11 @@ func upperFirst(s string) string {
 }
 
 // normalizeTitle applies Wikipedia title conventions to user input.
+// NFC normalization means visually-identical titles typed via a different
+// keyboard/IME (which can produce a decomposed accent form) still match the
+// precomposed form Wikipedia's dump titles are stored in.
 func normalizeTitle(s string) string {
-	return strings.TrimSpace(strings.ReplaceAll(s, "_", " "))
+	return norm.NFC.String(strings.TrimSpace(strings.ReplaceAll(s, "_", " ")))
 }
 
 type redirect struct {
@@ -307,7 +355,7 @@ func (w *Wiki) readPage(seek int64, id int) (*page, error) {
 
 	section := io.NewSectionReader(w.articles, seek, end-seek)
 	dec := xml.NewDecoder(bzip2.NewReader(section))
-	for tries := 0; tries < decodesPerStream; tries++ {
+	for tries := 0; tries < maxPagesPerStream; tries++ {
 		var p page
 		if err := dec.Decode(&p); err != nil {
 			if errors.Is(err, io.EOF) {

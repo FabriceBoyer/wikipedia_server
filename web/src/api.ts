@@ -53,3 +53,7 @@ export function searchTitles(
 export function fetchPage(source: string, title: string): Promise<Article> {
   return getJSON(`/api/${source}/page/${encodeURIComponent(title)}`);
 }
+
+export function fetchRandom(source: string): Promise<Article> {
+  return getJSON(`/api/${source}/random`);
+}
