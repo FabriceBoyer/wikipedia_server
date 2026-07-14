@@ -287,6 +287,39 @@ function inlineMarkup(line: string, currentTitle: string): string {
   return line;
 }
 
+// Matches either a known HTML entity (produced by escapeHtml, left alone -
+// splitting one up, e.g. wrapping just "amp" inside "&amp;", would corrupt
+// it) or a word: a run of letters/digits, allowing an apostrophe inside a
+// contraction ("don't") but not a hyphen, so a hyphenated compound like
+// "German-born" still yields two independently useful links rather than one
+// link to a compound title that almost certainly doesn't exist.
+const WORD_OR_ENTITY_RE = /&(?:amp|lt|gt|quot);|[\p{L}\p{N}][\p{L}\p{N}'’]*/gu;
+
+// Makes every remaining plain word clickable to its own page, on top of the
+// explicit [[links]] already rendered above. Operates on the finished HTML
+// string, alternating between tag chunks (left untouched) and text chunks
+// (word-wrapped) via the capturing split below, and tracks <a>/</a> nesting
+// so a word that's already part of a link (e.g. the label of a [[target|
+// label]] link, or of a same-page anchor link) never gets a second, nested
+// <a> wrapped around it.
+function linkifyWords(html: string): string {
+  let inAnchor = false;
+  return html
+    .split(/(<[^>]+>)/)
+    .map((part) => {
+      if (part.startsWith("<")) {
+        const tag = part.match(/^<\/?\s*([a-zA-Z][a-zA-Z0-9]*)/)?.[1]?.toLowerCase();
+        if (tag === "a") inAnchor = !part.startsWith("</");
+        return part;
+      }
+      if (inAnchor || part === "") return part;
+      return part.replace(WORD_OR_ENTITY_RE, (token) =>
+        token.startsWith("&") ? token : `<a class="ilink" data-page="${token}">${token}</a>`,
+      );
+    })
+    .join("");
+}
+
 export function renderWikitext(source: string, currentTitle: string): RenderedArticle {
   let text = source
     .replace(/<!--[\s\S]*?-->/g, "")
@@ -377,5 +410,5 @@ export function renderWikitext(source: string, currentTitle: string): RenderedAr
   flushParagraph();
   closeList();
 
-  return { html: out.join("\n"), categories, headings };
+  return { html: linkifyWords(out.join("\n")), categories, headings };
 }

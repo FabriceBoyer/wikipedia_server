@@ -157,26 +157,6 @@ func (s *store) searchPrefix(prefix string, limit int) ([]SearchResult, error) {
 	return results, rows.Err()
 }
 
-// streams returns the sorted, distinct list of bzip2 stream start offsets.
-// Used by the backlinks builder to decompress each stream exactly once
-// (streams pack ~100+ pages each) rather than once per page.
-func (s *store) streams() ([]int64, error) {
-	rows, err := s.db.Query(`SELECT DISTINCT seek FROM pages ORDER BY seek`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []int64
-	for rows.Next() {
-		var v int64
-		if err := rows.Scan(&v); err != nil {
-			return nil, err
-		}
-		out = append(out, v)
-	}
-	return out, rows.Err()
-}
-
 // streamEnd returns the smallest indexed seek offset greater than seek, or
 // fileSize if seek belongs to the last stream. This reuses the seek index
 // already needed for page lookups instead of maintaining a second

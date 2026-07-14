@@ -24,26 +24,6 @@ type source struct {
 	wiki *wikipedia.Wiki
 }
 
-// sourceView is what a source looks like in JSON responses: the static
-// fields above, plus BacklinksReady, which changes over time as the
-// background "what links here" index build progresses and so can't be
-// baked into *source at startup.
-type sourceView struct {
-	Name           string `json:"name"`
-	Description    string `json:"description"`
-	Pages          int    `json:"pages"`
-	BacklinksReady bool   `json:"backlinksReady"`
-}
-
-func (src *source) view() sourceView {
-	return sourceView{
-		Name:           src.Name,
-		Description:    src.Description,
-		Pages:          src.Pages,
-		BacklinksReady: src.wiki.BacklinksReady(),
-	}
-}
-
 type server struct {
 	sources map[string]*source
 	order   []string // stable ordering for listings
@@ -71,7 +51,6 @@ func (s *server) handler() http.Handler {
 	mux.HandleFunc("GET /api/sources", s.handleSources)
 	mux.HandleFunc("GET /api/{source}/search", s.handleSearch)
 	mux.HandleFunc("GET /api/{source}/random", s.handleRandom)
-	mux.HandleFunc("GET /api/{source}/backlinks", s.handleBacklinks)
 	mux.HandleFunc("GET /api/{source}/page/{title...}", s.handlePage)
 	mux.HandleFunc("GET /api/openapi.yaml", s.handleOpenAPISpec)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -93,9 +72,9 @@ func (s *server) handler() http.Handler {
 
 func (s *server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	type status struct {
-		Status  string       `json:"status"`
-		Uptime  string       `json:"uptime"`
-		Sources []sourceView `json:"sources"`
+		Status  string    `json:"status"`
+		Uptime  string    `json:"uptime"`
+		Sources []*source `json:"sources"`
 	}
 	writeJSON(w, http.StatusOK, status{
 		Status:  "ok",
@@ -108,10 +87,10 @@ func (s *server) handleSources(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.sourceList())
 }
 
-func (s *server) sourceList() []sourceView {
-	list := make([]sourceView, 0, len(s.order))
+func (s *server) sourceList() []*source {
+	list := make([]*source, 0, len(s.order))
 	for _, name := range s.order {
-		list = append(list, s.sources[name].view())
+		list = append(list, s.sources[name])
 	}
 	return list
 }
@@ -161,59 +140,6 @@ func (s *server) handleRandom(w http.ResponseWriter, r *http.Request) {
 		Source string `json:"source"`
 		*wikipedia.Article
 	}{src.Name, article})
-}
-
-func (s *server) handleBacklinks(w http.ResponseWriter, r *http.Request) {
-	src, ok := s.sources[r.PathValue("source")]
-	if !ok {
-		writeError(w, http.StatusNotFound, "unknown_source", "unknown source: "+r.PathValue("source"))
-		return
-	}
-	title := r.URL.Query().Get("title")
-	if title == "" {
-		writeError(w, http.StatusBadRequest, "missing_title", "query parameter 'title' is required")
-		return
-	}
-	after := r.URL.Query().Get("after")
-	limit := defaultSearchLimit
-	if l := r.URL.Query().Get("limit"); l != "" {
-		n, err := strconv.Atoi(l)
-		if err != nil || n < 1 {
-			writeError(w, http.StatusBadRequest, "bad_limit", "'limit' must be a positive integer")
-			return
-		}
-		limit = min(n, maxSearchLimit)
-	}
-
-	results, total, hasMore, err := src.wiki.LinksTo(title, after, limit)
-	if err != nil {
-		switch {
-		case errors.Is(err, wikipedia.ErrBacklinksNotReady):
-			writeJSON(w, http.StatusOK, map[string]any{
-				"source": src.Name,
-				"title":  title,
-				"ready":  false,
-			})
-		case errors.Is(err, wikipedia.ErrNotFound):
-			writeError(w, http.StatusNotFound, "not_found", err.Error())
-		default:
-			slog.Error("backlinks lookup failed", "source", src.Name, "title", title, "error", err)
-			writeError(w, http.StatusInternalServerError, "read_error", "failed to fetch backlinks")
-		}
-		return
-	}
-
-	resp := map[string]any{
-		"source":  src.Name,
-		"title":   title,
-		"ready":   true,
-		"total":   total,
-		"results": results,
-	}
-	if hasMore {
-		resp["nextAfter"] = results[len(results)-1].Title
-	}
-	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *server) handleOpenAPISpec(w http.ResponseWriter, r *http.Request) {

@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/fabriceboyer/wikipedia_server/wikipedia"
 )
@@ -125,56 +124,6 @@ func TestAPIRandom(t *testing.T) {
 	getJSON(t, ts.URL+"/api/nope/random", http.StatusNotFound, nil)
 }
 
-// waitBacklinksReady polls the API until the background backlinks build
-// finishes; the fixture is tiny, so this resolves in well under a second.
-func waitBacklinksReady(t *testing.T, ts *httptest.Server, source string) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		var status struct {
-			Sources []struct {
-				Name           string `json:"name"`
-				BacklinksReady bool   `json:"backlinksReady"`
-			} `json:"sources"`
-		}
-		getJSON(t, ts.URL+"/api/status", http.StatusOK, &status)
-		for _, s := range status.Sources {
-			if s.Name == source && s.BacklinksReady {
-				return
-			}
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("backlinks index did not become ready in time")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-}
-
-func TestAPIBacklinks(t *testing.T) {
-	ts := testServer(t)
-	waitBacklinksReady(t, ts, "wiki")
-
-	var page struct {
-		Ready     bool                 `json:"ready"`
-		Total     int                  `json:"total"`
-		Results   []wikipedia.Backlink `json:"results"`
-		NextAfter string               `json:"nextAfter"`
-	}
-	getJSON(t, ts.URL+"/api/wiki/backlinks?title=Backlink+Target&limit=10", http.StatusOK, &page)
-	if !page.Ready || page.Total != 25 || len(page.Results) != 10 || page.NextAfter == "" {
-		t.Errorf("unexpected first page: %+v", page)
-	}
-
-	getJSON(t, ts.URL+"/api/wiki/backlinks?title=Autism", http.StatusOK, &page)
-	if !page.Ready || page.Total != 0 || len(page.Results) != 0 {
-		t.Errorf("expected no backlinks for Autism: %+v", page)
-	}
-
-	getJSON(t, ts.URL+"/api/wiki/backlinks", http.StatusBadRequest, nil)
-	getJSON(t, ts.URL+"/api/wiki/backlinks?title=Nonexistent+Page", http.StatusNotFound, nil)
-	getJSON(t, ts.URL+"/api/nope/backlinks?title=Anarchism", http.StatusNotFound, nil)
-}
-
 func TestOpenAPISpec(t *testing.T) {
 	ts := testServer(t)
 	resp, err := http.Get(ts.URL + "/api/openapi.yaml")
@@ -201,7 +150,7 @@ func TestAPIStatusAndSources(t *testing.T) {
 		} `json:"sources"`
 	}
 	getJSON(t, ts.URL+"/api/status", http.StatusOK, &st)
-	if st.Status != "ok" || len(st.Sources) != 1 || st.Sources[0].Pages != 1209 {
+	if st.Status != "ok" || len(st.Sources) != 1 || st.Sources[0].Pages != 1208 {
 		t.Errorf("unexpected status: %+v", st)
 	}
 }

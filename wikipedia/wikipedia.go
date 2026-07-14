@@ -5,7 +5,6 @@ package wikipedia
 
 import (
 	"compress/bzip2"
-	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -15,8 +14,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -56,13 +53,6 @@ type Wiki struct {
 	store        *store
 	articles     *os.File
 	articlesSize int64
-
-	// backlinks is published once the background "what links here" index
-	// (see backlinks.go) finishes building; nil until then. A Pointer gives
-	// lock-free reads for the common case (already built, or not yet).
-	backlinks atomic.Pointer[backlinkStore]
-	bgCancel  context.CancelFunc
-	bgWG      sync.WaitGroup
 }
 
 // Open loads the dump index, preferring a previously built on-disk cache
@@ -86,35 +76,17 @@ func Open(indexPath, articlesPath string, opts *Options) (*Wiki, error) {
 		return nil, err
 	}
 
-	storePath := storeCachePath(indexPath, opts.CacheDir)
 	st, err := openOrBuildStore(indexPath, opts, srcStat.Size(), srcStat.ModTime().Unix())
 	if err != nil {
 		articles.Close()
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	w := &Wiki{
+	return &Wiki{
 		store:        st,
 		articles:     articles,
 		articlesSize: artStat.Size(),
-		bgCancel:     cancel,
-	}
-
-	// Building the reverse "what links here" index requires scanning every
-	// page's full text (not just the small title index), which can take a
-	// very long time on a large dump - so it never blocks startup. Pages
-	// simply report backlinks as "not ready" until this finishes. Close()
-	// cancels ctx and waits for this goroutine (and everything it spawns)
-	// to actually stop before closing the files it reads from.
-	backlinksPath := backlinksCachePath(indexPath, opts.CacheDir)
-	w.bgWG.Add(1)
-	go func() {
-		defer w.bgWG.Done()
-		w.buildBacklinksAsync(ctx, storePath, backlinksPath, artStat.Size(), artStat.ModTime().Unix())
-	}()
-
-	return w, nil
+	}, nil
 }
 
 // openOrBuildStore returns a ready-to-query store, preferring a valid
@@ -160,19 +132,8 @@ func storeCachePath(indexPath, cacheDir string) string {
 	return filepath.Join(cacheDir, base)
 }
 
-// Close stops the background backlinks build (if still running) and waits
-// for it to actually exit before closing the underlying files, so no
-// goroutine is left reading from them afterward.
 func (w *Wiki) Close() error {
-	w.bgCancel()
-	w.bgWG.Wait()
-
 	err := w.store.close()
-	if bl := w.backlinks.Load(); bl != nil {
-		if cerr := bl.close(); err == nil {
-			err = cerr
-		}
-	}
 	if cerr := w.articles.Close(); err == nil {
 		err = cerr
 	}
@@ -181,36 +142,6 @@ func (w *Wiki) Close() error {
 
 // Pages returns the number of indexed pages.
 func (w *Wiki) Pages() int { return w.store.pages() }
-
-// BacklinksReady reports whether the "what links here" index has finished
-// its background build for this source.
-func (w *Wiki) BacklinksReady() bool { return w.backlinks.Load() != nil }
-
-// LinksTo returns pages that link to title, ordered by title and paginated
-// via a keyset cursor: pass the empty string for the first page, then the
-// previous call's last result's title for subsequent pages. hasMore
-// indicates whether another page follows. Returns ErrBacklinksNotReady
-// while the background index build is still in progress.
-func (w *Wiki) LinksTo(title, after string, limit int) (results []Backlink, total int, hasMore bool, err error) {
-	bl := w.backlinks.Load()
-	if bl == nil {
-		return nil, 0, false, ErrBacklinksNotReady
-	}
-	name := normalizeTitle(title)
-	_, id, ok := w.lookup(name)
-	if !ok {
-		return nil, 0, false, fmt.Errorf("%w: %q", ErrNotFound, title)
-	}
-	results, err = bl.linksTo(id, after, limit+1)
-	if err != nil {
-		return nil, 0, false, err
-	}
-	if len(results) > limit {
-		results = results[:limit]
-		hasMore = true
-	}
-	return results, bl.count(id), hasMore, nil
-}
 
 type SearchResult struct {
 	Title string `json:"title"`

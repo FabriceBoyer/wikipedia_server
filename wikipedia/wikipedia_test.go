@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 func openFixture(t *testing.T) *Wiki {
@@ -22,23 +21,10 @@ func openFixture(t *testing.T) *Wiki {
 	return w
 }
 
-// waitBacklinksReady polls until the background backlinks build finishes;
-// the fixture is tiny, so this should resolve in well under a second.
-func waitBacklinksReady(t *testing.T, w *Wiki) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for !w.BacklinksReady() {
-		if time.Now().After(deadline) {
-			t.Fatal("backlinks index did not become ready in time")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-}
-
 func TestGetArticle(t *testing.T) {
 	w := openFixture(t)
 
-	const wantPages = 6 + 2 + 1 + 1200 // see testdata/generate.sh
+	const wantPages = 6 + 2 + 1200 // see testdata/generate.sh
 	if got := w.Pages(); got != wantPages {
 		t.Errorf("Pages() = %d, want %d", got, wantPages)
 	}
@@ -229,74 +215,6 @@ func TestRandomArticle(t *testing.T) {
 	}
 	if len(seen) < 2 {
 		t.Errorf("RandomArticle returned the same title %d/20 times, expected variety", 20-len(seen)+1)
-	}
-}
-
-func TestBacklinksNotReadyBeforeBuild(t *testing.T) {
-	w := openFixture(t)
-	// Racy by nature (the background build might finish before this runs
-	// on a fast machine), so only check the case where it fires: it must
-	// be ErrBacklinksNotReady, never some other error or a wrong result.
-	if _, _, _, err := w.LinksTo("Backlink Target", "", 10); err != nil && !errors.Is(err, ErrBacklinksNotReady) {
-		t.Errorf("err = %v, want nil or ErrBacklinksNotReady", err)
-	}
-}
-
-func TestBacklinks(t *testing.T) {
-	w := openFixture(t)
-	waitBacklinksReady(t, w)
-
-	// 25 of the "Filler NNNN" pages link to it (see generate.sh); #1 via an
-	// all-lowercase target (case-fallback) and #2 twice (must dedupe).
-	const pageSize = 10
-	results, total, hasMore, err := w.LinksTo("Backlink Target", "", pageSize)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if total != 25 {
-		t.Errorf("total = %d, want 25", total)
-	}
-	if !hasMore || len(results) != pageSize {
-		t.Errorf("first page: len=%d hasMore=%v, want len=%d hasMore=true", len(results), hasMore, pageSize)
-	}
-
-	seen := map[string]struct{}{}
-	for _, r := range results {
-		seen[r.Title] = struct{}{}
-	}
-	after := results[len(results)-1].Title
-	for {
-		page, _, more, err := w.LinksTo("Backlink Target", after, pageSize)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, r := range page {
-			if _, dup := seen[r.Title]; dup {
-				t.Errorf("duplicate result across pages: %q", r.Title)
-			}
-			seen[r.Title] = struct{}{}
-		}
-		if !more {
-			break
-		}
-		after = page[len(page)-1].Title
-	}
-	if len(seen) != 25 {
-		t.Errorf("distinct backlinks across all pages = %d, want 25", len(seen))
-	}
-	if _, ok := seen["Filler 0001"]; !ok {
-		t.Error("Filler 0001 (lowercase link target) missing from backlinks")
-	}
-	if _, ok := seen["Filler 0002"]; !ok {
-		t.Error("Filler 0002 (double link, must dedupe) missing from backlinks")
-	}
-
-	if _, total0, _, err := w.LinksTo("Autism", "", 10); err != nil || total0 != 0 {
-		t.Errorf("Autism backlinks: total=%d err=%v, want 0, nil", total0, err)
-	}
-
-	if _, _, _, err := w.LinksTo("Nonexistent Page", "", 10); !errors.Is(err, ErrNotFound) {
-		t.Errorf("err = %v, want ErrNotFound", err)
 	}
 }
 
