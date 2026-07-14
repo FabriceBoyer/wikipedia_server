@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Article } from "../api";
 import { renderWikitext } from "../wikitext";
+import WhatLinksHere from "./WhatLinksHere";
 
 interface Props {
   article: Article;
@@ -127,6 +128,11 @@ export default function ArticleView({ article, scrollToAnchor, onNavigate }: Pro
           </p>
         </>
       )}
+      <WhatLinksHere
+        source={article.source}
+        title={article.title}
+        onNavigate={(title) => onNavigate(title)}
+      />
     </article>
   );
 }

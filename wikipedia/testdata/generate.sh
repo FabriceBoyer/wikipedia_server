@@ -137,16 +137,46 @@ cat > s3.xml <<'EOF'
       <text>Current duplicate (higher id, should win).</text>
     </revision>
   </page>
+  <page>
+    <title>Backlink Target</title>
+    <ns>0</ns>
+    <id>5500</id>
+    <revision>
+      <id>3003</id>
+      <timestamp>2024-03-03T00:00:00Z</timestamp>
+      <contributor><username>Tester</username><id>1</id></contributor>
+      <model>wikitext</model>
+      <format>text/x-wiki</format>
+      <text>A page that 25 of the filler pages below link to, for backlink tests.</text>
+    </revision>
+  </page>
 EOF
 
 # s4: one oversized stream (1200 pages) - real multistream dumps nominally
 # pack ~100 pages per stream but occasionally pack far more (long runs of
 # short redirect stubs). readPage must not give up before reaching the
 # last page in a stream this large.
+#
+# The first 25 of these also each link to "Backlink Target" above, giving
+# it a known, round incoming-link count to test pagination against. #1
+# links with only its first letter lowercased (tests the case-fallback in
+# link resolution - MediaWiki only auto-capitalizes a title's very first
+# character, not every word, so this - unlike an all-lowercase target -
+# really does need to resolve) and #2 links to it twice (tests per-page
+# de-duplication) - both must still count as exactly one backlink each.
 : > s4.xml
 for i in $(seq 1 1200); do
     n=$(printf '%04d' "$i")
     id=$((7000 + i))
+    if [ "$i" -eq 1 ]; then
+        text="Filler page $n links to [[backlink Target]] (first letter lowercased)."
+    elif [ "$i" -eq 2 ]; then
+        text="Filler page $n links to [[Backlink Target]] and again as [[Backlink Target|here]]."
+    elif [ "$i" -le 25 ]; then
+        text="Filler page $n links to [[Backlink Target]]."
+    else
+        text="Filler page $n."
+    fi
     cat >> s4.xml <<EOF
   <page>
     <title>Filler $n</title>
@@ -158,7 +188,7 @@ for i in $(seq 1 1200); do
       <contributor><username>Tester</username><id>1</id></contributor>
       <model>wikitext</model>
       <format>text/x-wiki</format>
-      <text>Filler page $n.</text>
+      <text>$text</text>
     </revision>
   </page>
 EOF
@@ -183,6 +213,7 @@ o4=$((o3 + $(stat -c%s s3.xml.bz2)))
     echo "$o2:1000:Ω"
     echo "$o3:5000:Duplicate Title"
     echo "$o3:6000:Duplicate Title"
+    echo "$o3:5500:Backlink Target"
     for i in $(seq 1 1200); do
         n=$(printf '%04d' "$i")
         echo "$o4:$((7000 + i)):Filler $n"

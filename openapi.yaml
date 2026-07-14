@@ -107,6 +107,58 @@ paths:
         "500":
           $ref: "#/components/responses/Error"
 
+  /api/{source}/backlinks:
+    get:
+      tags: [articles]
+      summary: Pages that link to a page ("what links here")
+      description: >
+        Built once in the background per source, since it requires scanning
+        every page's full text rather than just the small title index - can
+        take a long time on large dumps. While that build is in progress
+        (or hasn't started yet), `ready` is false and `results` is omitted;
+        poll `/api/sources` for `backlinksReady` or just retry. Paginated by
+        an opaque title cursor (`after`), not page number, since some pages
+        have hundreds of thousands of incoming links: pass the previous
+        response's `nextAfter` to fetch the next page, and stop once
+        `nextAfter` is absent.
+      operationId: getBacklinks
+      parameters:
+        - $ref: "#/components/parameters/Source"
+        - name: title
+          in: query
+          required: true
+          description: Page title to find incoming links for
+          schema:
+            type: string
+        - name: after
+          in: query
+          required: false
+          description: Cursor from a previous response's nextAfter; omit for the first page
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of results per page (capped server-side)
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BacklinksResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "500":
+          $ref: "#/components/responses/Error"
+
   /api/{source}/page/{title}:
     get:
       tags: [articles]
@@ -200,7 +252,12 @@ components:
         pages:
           type: integer
           example: 6800000
-      required: [name, description, pages]
+        backlinksReady:
+          type: boolean
+          description: >
+            Whether the background "what links here" index has finished
+            building for this source
+      required: [name, description, pages, backlinksReady]
     Status:
       type: object
       properties:
@@ -274,6 +331,33 @@ components:
           type: string
           description: Raw wikitext body
       required: [source, title, id, ns, text]
+    Backlink:
+      type: object
+      properties:
+        title:
+          type: string
+      required: [title]
+    BacklinksResponse:
+      type: object
+      properties:
+        source:
+          type: string
+        title:
+          type: string
+        ready:
+          type: boolean
+          description: False while the background index build is still in progress
+        total:
+          type: integer
+          description: Total number of pages linking here (omitted while not ready)
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Backlink"
+        nextAfter:
+          type: string
+          description: Pass as `after` to fetch the next page; absent on the last page
+      required: [source, title, ready]
     ErrorResponse:
       type: object
       properties:

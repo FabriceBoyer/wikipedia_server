@@ -2,6 +2,7 @@ export interface Source {
   name: string;
   description: string;
   pages: number;
+  backlinksReady: boolean;
 }
 
 export interface SearchResult {
@@ -56,4 +57,28 @@ export function fetchPage(source: string, title: string): Promise<Article> {
 
 export function fetchRandom(source: string): Promise<Article> {
   return getJSON(`/api/${source}/random`);
+}
+
+export interface Backlink {
+  title: string;
+}
+
+export interface BacklinksPage {
+  source: string;
+  title: string;
+  ready: boolean;
+  total?: number;
+  results?: Backlink[];
+  nextAfter?: string;
+}
+
+export function fetchBacklinks(
+  source: string,
+  title: string,
+  after?: string,
+  limit = 30,
+): Promise<BacklinksPage> {
+  const params = new URLSearchParams({ title, limit: String(limit) });
+  if (after) params.set("after", after);
+  return getJSON(`/api/${source}/backlinks?${params}`);
 }

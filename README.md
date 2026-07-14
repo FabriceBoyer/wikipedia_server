@@ -19,8 +19,8 @@ Freely based on https://github.com/d4l3k/wikigopher.
   at a time, straight from the `.xml.bz2` file on disk.
 - **Web UI**: a React interface with search-as-you-type, a readable article
   preview (with a table of contents, category tags, and working in-article
-  links), a random-article button, and shareable/deep-linkable URLs
-  (including same-page section anchors).
+  links), a random-article button, a "what links here" panel on every page,
+  and shareable/deep-linkable URLs (including same-page section anchors).
 - **API docs**: an OpenAPI 3.0 spec at `/api/openapi.yaml`, browsable with a
   bundled (offline, no CDN) Swagger UI at `/swagger/`.
 
@@ -49,6 +49,7 @@ those files. Stop with `./stop.sh`.
 | `GET /api/status` | Server status, uptime, sources |
 | `GET /api/{source}/search?q=<prefix>&limit=20` | Title prefix search (case-variant aware) |
 | `GET /api/{source}/random` | A uniformly-random article |
+| `GET /api/{source}/backlinks?title=<title>&after=&limit=20` | Pages linking to `title` ("what links here"), paginated |
 | `GET /api/{source}/page/{title}` | Full page as JSON (see below) |
 | `GET /api/{source}/page/{title}?raw=1` | Wikitext only, as `text/plain` |
 | `GET /api/{source}/page/{title}?follow=0` | Do not resolve redirects |
@@ -110,6 +111,22 @@ the higher page id. Streams are also decoded to their natural end (bounded
 by the next stream's offset) rather than a fixed page-per-stream guess,
 since real dumps occasionally pack far more than the nominal ~100 pages into
 one stream (long runs of short redirect stubs).
+
+**"What links here"** (`/api/{source}/backlinks`) needs a reverse index -
+for a page, every *other* page whose wikitext links to it - which the title
+index alone doesn't give you: building it means scanning every page's full
+text, not just the small `.txt.bz2` index file. That's a much bigger job (a
+full pass over the `.xml.bz2` dump, decompressing every stream), so unlike
+the title index it never blocks startup: each source builds its backlinks
+index in the background (parallelized across CPU cores) after the server is
+already serving requests, cached the same way (`*-backlinks.sqlite`, atomic
+build-then-rename, skipped on later restarts if still valid). Until it's
+done, the endpoint responds with `"ready": false` rather than an empty or
+partial list; `/api/sources` also exposes `backlinksReady` per source, and
+the web UI's "what links here" panel retries in the background until it
+flips to true. Pagination is by an opaque title cursor (`after`/`nextAfter`),
+not page number or offset, since some pages (e.g. a country, a common word)
+can have hundreds of thousands of incoming links.
 
 The web UI's article view renders wikitext with a small, deliberately
 incomplete converter (see `web/src/wikitext.ts`): headings, emphasis, lists,

@@ -408,6 +408,72 @@ a.anchor-link:hover {
   overflow: auto;
 }
 
+/* --- what links here --- */
+
+.whatlinkshere {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.whatlinkshere-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  background: none;
+  border: none;
+  padding: 0.2rem 0;
+  cursor: pointer;
+}
+
+.chevron {
+  display: inline-block;
+  transition: transform 0.15s;
+  color: var(--muted);
+}
+
+.chevron.open {
+  transform: rotate(90deg);
+}
+
+.whatlinkshere-body {
+  margin-top: 0.6rem;
+  font-size: 0.9rem;
+}
+
+.whatlinkshere-list {
+  columns: 2;
+  column-gap: 1.5rem;
+  margin: 0 0 0.8rem;
+  padding: 0;
+  list-style: none;
+}
+
+.whatlinkshere-list li {
+  margin: 0.2rem 0;
+  break-inside: avoid;
+}
+
+.notice-inline {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0.4rem 0;
+}
+
+.notice-inline.error {
+  color: #c0392b;
+}
+
+@media (max-width: 640px) {
+  .whatlinkshere-list {
+    columns: 1;
+  }
+}
+
 .disclaimer {
   margin-top: 2rem;
   font-size: 0.8rem;
